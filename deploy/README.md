@@ -80,3 +80,8 @@ PostgreSQL custom dump 在既有数据目录 backup/db_*/database.dump，权限 
 
 不要运行 `docker compose down -v` 或删除 creatorsn-postgres-data。
 不要把远端配置、SQL dump、上传归档或容器 inspect 文件提交到 Git。
+# OIDC 更新
+
+启用 OIDC 前须创建并持久保存 `secrets/oidc-signing.pem`，
+更新 schema 和部署 compose 后再启动 Web。具体步骤与接口说明见
+[`docs/oidc.md`](../docs/oidc.md)。签名密钥不得打包到镜像，不包含在 pg_dump 内。

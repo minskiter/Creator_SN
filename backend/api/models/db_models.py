@@ -101,3 +101,37 @@ class ProductAttributeValueDBModel(BaseDBModel):
     publisher_id = fields.CharField(max_length=255, null=True)
     publish_time = fields.CharField(max_length=255, null=True)
     update_time = fields.CharField(max_length=255, null=True)
+
+
+class OIDCClient(BaseDBModel):
+    client_id = fields.CharField(max_length=64, pk=True)
+    name = fields.CharField(max_length=120)
+    description = fields.TextField(default='')
+    redirect_uris = fields.JSONField()
+    client_type = fields.CharField(max_length=16)
+    secret_hash = fields.TextField(null=True)
+    enabled = fields.BooleanField(default=True, db_default=True)
+    created_by = fields.CharField(max_length=255)
+    created_at = fields.BigIntField()
+
+
+class OIDCCode(BaseDBModel):
+    code_hash = fields.CharField(max_length=64, pk=True)
+    client = fields.ForeignKeyField('models.OIDCClient', related_name='codes', on_delete=fields.CASCADE)
+    subject = fields.CharField(max_length=255)
+    redirect_uri = fields.TextField()
+    scope = fields.CharField(max_length=64)
+    nonce = fields.CharField(max_length=512, null=True)
+    challenge = fields.CharField(max_length=43)
+    auth_time = fields.BigIntField()
+    expires_at = fields.BigIntField(index=True)
+    consumed = fields.BooleanField(default=False, db_default=False)
+
+
+class OIDCAccessToken(BaseDBModel):
+    token_hash = fields.CharField(max_length=64, pk=True)
+    client = fields.ForeignKeyField('models.OIDCClient', related_name='tokens', on_delete=fields.CASCADE)
+    subject = fields.CharField(max_length=255)
+    scope = fields.CharField(max_length=64)
+    expires_at = fields.BigIntField(index=True)
+    grant_hash = fields.CharField(max_length=64, index=True)

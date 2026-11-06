@@ -3,7 +3,7 @@ import contextlib
 import json
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from tortoise.contrib.fastapi import register_tortoise
@@ -13,6 +13,7 @@ from api.controllers.product import router as product_router
 from api.controllers.project import router as project_router, seed_default_projects
 from api.controllers.resume import router as resume_router
 from api.controllers.user import router as user_router
+from api.controllers.oidc import router as oidc_router
 from api.models.db_backup import create_monthly_db_backup
 from api.models.database import tortoise_config
 
@@ -38,7 +39,26 @@ async def api_compatibility_prefix(request: Request, call_next):
     """Keep the frontend's /api URLs compatible with the existing API routes."""
     if request.scope['path'] == '/api' or request.scope['path'].startswith('/api/'):
         request.scope['path'] = request.scope['path'][4:] or '/'
-    return await call_next(request)
+    path = request.scope['path']
+    public_oidc = path in {
+        '/oauth/token', '/oauth/userinfo', '/oauth/revoke',
+        '/oauth/jwks', '/.well-known/openid-configuration',
+    }
+    if public_oidc and request.method == 'OPTIONS':
+        response = Response(status_code=204)
+    else:
+        response = await call_next(request)
+    if path.startswith(('/oauth/', '/oidc/')):
+        response.headers['Cache-Control'] = 'no-store'
+        response.headers['Referrer-Policy'] = 'no-referrer'
+    if public_oidc:
+        # These routes use explicit OAuth credentials, never cookies/session auth.
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        if 'access-control-allow-credentials' in response.headers:
+            del response.headers['access-control-allow-credentials']
+    return response
 
 BACKUP_CHECK_SECONDS = 30 * 24 * 60 * 60
 backup_task = None
@@ -80,6 +100,7 @@ app.include_router(member_router)
 app.include_router(product_router)
 app.include_router(project_router)
 app.include_router(resume_router)
+app.include_router(oidc_router)
 
 # The frontend is built into this directory by the multi-stage Dockerfile.
 # html=True also serves index.html for the root document; the Vue app uses hash

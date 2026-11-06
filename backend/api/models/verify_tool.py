@@ -5,6 +5,11 @@ from api.models.jwt_tool import decode_jwt
 from functools import wraps
 import inspect
 from fastapi.responses import JSONResponse
+from api.models.db_models import UserDBModel
+
+
+def has_admin_role(role):
+    return 'admin' in {item.strip() for item in (role or '').split(',')}
 
 class Auth():
 
@@ -60,10 +65,16 @@ class Auth():
         valid_info, valid_status = Auth.valid_user(api_key, self.app_config['jwt_key'], self.algorithms)
         if not valid_status:
             return (False, response_body(code=403, status='failed', message=valid_info['message']))
-        role = valid_info['role']
-        if role.find('admin') < 0:
+        if not await self.current_admin(valid_info):
             return (False, response_body(code=403, status='failed', message='permission denied'))
         return (True, valid_info)
+
+    async def current_admin(self, valid_info):
+        if valid_info['userid'] == self.app_config['root_name']:
+            return has_admin_role(valid_info['role'])
+        # Re-read permissions so removing admin takes effect for existing JWTs.
+        user = await UserDBModel.get_or_none(userid=valid_info['userid'])
+        return bool(user and has_admin_role(user.role))
     
     def require_user(self):
         def decorator(func):
@@ -109,8 +120,7 @@ class Auth():
                         status_code=200,
                         content=res()
                     )
-                role = valid_info['role']
-                if role.find('admin') < 0:
+                if not await self.current_admin(valid_info):
                     res = response_body(code=403, status='failed', message='permission denied')
                     return JSONResponse(
                         status_code=200,

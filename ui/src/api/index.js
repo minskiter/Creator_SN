@@ -58,3 +58,13 @@ export const ProjectApi = {
 };
 
 export { client as axios, User };
+
+export const OIDCApi = {
+  list: () => request("get", "/oidc/clients"),
+  create: (body) => request("post", "/oidc/clients", body),
+  update: (id, body) => request("put", `/oidc/clients/${encodeURIComponent(id)}`, body),
+  remove: (id) => request("delete", `/oidc/clients/${encodeURIComponent(id)}`),
+  rotate: (id) => request("post", `/oidc/clients/${encodeURIComponent(id)}/rotate-secret`),
+  preview: (body) => request("post", "/oidc/authorize/preview", body),
+  authorize: (body) => request("post", "/oidc/authorize", body)
+};

@@ -27,6 +27,10 @@ services:
     container_name: creator_sn-web-1
     environment:
       PYTHONPATH: /app
+      OIDC_ISSUER: https://creatorsn.com
+      OIDC_SIGNING_KEY_FILE: /run/secrets/oidc_signing_key
+    secrets:
+      - oidc_signing_key
     volumes:
       - ./app_config.json:/app/api/app_config.json:ro
       - ${DATA_DIR:?Set the existing upload data directory}/backup:/app/backup
@@ -61,5 +65,7 @@ volumes:
   postgres_data:
     name: creatorsn-postgres-data
 secrets:
+  oidc_signing_key:
+    file: ./secrets/oidc-signing.pem
   postgres_admin_password:
     file: ./secrets/postgres-admin-password

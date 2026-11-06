@@ -35,6 +35,11 @@ const router = createRouter({
       ]
     },
     {
+      path: "/oauth/authorize",
+      component: tool.AsyncLoad(() => import("@/views/auth/OIDCAuthorizeView.vue")),
+      meta: { requiresAuth: true, title: "应用授权 · Creator SN" }
+    },
+    {
       path: "/profile",
       name: "Profile",
       component: tool.AsyncLoad(() => import("@/views/profile/ProfileView.vue")),
@@ -46,6 +51,7 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresAdmin: true, title: "用户管理 · Creator SN" },
       children: [
         { path: "", redirect: "/admin/users" },
+        { path: "applications", name: "AdminApplications", component: tool.AsyncLoad(() => import("@/views/admin/AdminApplicationsView.vue")), meta: { title: "应用管理 · Creator SN" } },
         { path: "users", name: "AdminUsers", component: tool.AsyncLoad(() => import("@/views/admin/AdminUsersView.vue")) },
         { path: "projects", name: "AdminProjects", component: tool.AsyncLoad(() => import("@/views/admin/AdminProjectsView.vue")) },
         { path: "resumes", name: "AdminResumes", component: tool.AsyncLoad(() => import("@/views/admin/AdminResumesView.vue")) }
