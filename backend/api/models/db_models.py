@@ -69,7 +69,7 @@ class ProjectDBModel(BaseDBModel):
     repo_type = fields.CharField(max_length=64, null=True)
     href = fields.TextField(null=True)
     icon = fields.TextField(null=True)
-    favor = fields.BooleanField(default=False)
+    favor = fields.BooleanField(default=False, db_default=False)
     audit_status = fields.CharField(max_length=64, null=True)
     publish_time = fields.CharField(max_length=255, null=True)
     update_time = fields.CharField(max_length=255, null=True)

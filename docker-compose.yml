@@ -7,7 +7,9 @@ services:
       - "60081:8000"
     environment:
       PYTHONPATH: /app
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL to the PostgreSQL connection URL}
     volumes:
+      - ${CREATOR_SN_CONFIG_FILE:-./backend/api/app_config.json}:/app/api/app_config.json:ro
       - ${CREATOR_SN_DATA_DIR:-./backend}/db:/app/db
       - ${CREATOR_SN_DATA_DIR:-./backend}/backup:/app/backup
       - ${CREATOR_SN_DATA_DIR:-./backend}/member_cv:/app/member_cv

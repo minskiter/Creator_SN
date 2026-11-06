@@ -7,3 +7,12 @@ ui/node_modules
 ui/dist
 backend/db/*.sqlite3
 backend/backup
+
+.venv
+.local
+backend/api/app_config.json
+backend/api/app_config.json.tmp
+
+deploy/app_config.json
+deploy/secrets
+deploy/.env

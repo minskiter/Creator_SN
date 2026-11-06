@@ -1,36 +1,44 @@
 # Creator SN
 
-The repository is split into a Vue/Vite frontend and a FastAPI backend. For the
-Docker deployment, the backend image builds and packages both parts:
+Vue 3 / Vite / Fluent 组件库前端 + FastAPI / Tortoise ORM / PostgreSQL 后端。
 
-- `ui/`: the Vue/Vite frontend.
-- `backend/`: the FastAPI/Tortoise backend and the final runtime image.
+- `ui/`：前端。
+- `backend/`：API、模型、表结构升级及最终运行镜像。
+- [本地开发环境](docs/development.md)：Node 22 + Python 3.13 + PostgreSQL，一键启动。
+- [数据库升级规则](backend/migrations/README.md)：增量同步、版本化 SQL、事务回滚。
 
-The first backend slice contains the core application, database initialization and backup, user management, and member/product resource management. Other management domains remain unregistered for now.
+## 本地启动
 
-The Creator SN Portal now also includes DAIR-style invited registration, JWT login, profile editing, password changes, avatar upload/cropping, and a branded default avatar. The frontend Axios client uses `/api` in development and Docker; `npm run api` regenerates the Swagger client from the backend OpenAPI document.
-
-Build and run the integrated service with. The production reverse proxy can
-continue forwarding the existing `60081` entry point to this service's port
-`8000`; there is no separate frontend container anymore.
-
-When deploying through a remote Docker context, bind-mounted data must point
-to directories on the Docker server, not the local computer. Set the server
-data directory before running Compose, for example in PowerShell:
-
-```powershell
-$env:CREATOR_SN_DATA_DIR = "/opt/creator-sn-data"
-docker context use <server-context>
-docker compose up -d --build
+```sh
+brew install postgresql@18
+./scripts/setup-dev.sh
+.venv/bin/python scripts/dev.py
 ```
 
-The database and uploaded files will then be stored under
-`/opt/creator-sn-data` on the server. The default `./backend` value remains
-available for local Docker deployments.
+网站 http://127.0.0.1:8080，API 文档 http://127.0.0.1:8000/docs。
+配置/密码不入库；SQLite 原文件保留，但运行时只使用 PostgreSQL。
 
-```powershell
-docker compose up --build
+## Docker（需显式配置，不会自动迁移线上 SQLite）
+
+镜像内置前端构建，无独立前端容器；Web 端口仍是 `60081 → 8000`。
+Compose 需要在受保护环境中设置 DATABASE_URL，指向容器可访问的 PostgreSQL
+（容器内 127.0.0.1 不是宿主机）。数据库必须预先创建；不会自动运行 PostgreSQL 容器。
+
+运行时只读挂载 backend/api/app_config.json，不把管理员密码/JWT 密钥打入镜像。
+远程 Docker context 下，配置文件和 CREATOR_SN_DATA_DIR 必须是服务端路径。
+可使用 CREATOR_SN_CONFIG_FILE 指定服务端配置文件的绝对路径。
+数据目录仅用于上传、备份及保留旧数据；PostgreSQL 数据由数据库服务单独管理。
+
+部署前应审阅差异、备份并停写，先检查/执行结构升级，再启动：
+
+```sh
+# 确保当前 Docker context 是你准备操作的目标；不要直接对生产运行这些命令。
+docker compose build web
+docker compose run --rm web python scripts/init_database.py --check
+docker compose run --rm web python scripts/init_database.py
+docker compose up -d web
 ```
 
-- Frontend: `http://localhost:60081`
-- Backend API: `http://localhost:60081/api`
+`--check` 有待升级项时返回 1；这与连接/配置异常（退出 2）不同。
+不提供自动删库/重置模式。生产 SQLite 转 PostgreSQL 必须另行制定并验证数据迁移方案，
+本地切换不代表线上已迁移。pg_dump 客户端版本必须不低于 PostgreSQL 服务端版本。

@@ -1,0 +1,65 @@
+# Run in a protected server release directory with a mode-0600 .env file.
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:?Pin the PostgreSQL image digest}
+    container_name: creatorsn-postgres
+    environment:
+      POSTGRES_USER: creator_admin
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_admin_password
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=scram-sha-256
+    secrets:
+      - postgres_admin_password
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    networks: [database]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U creator_admin -d postgres]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    shm_size: 256mb
+    mem_limit: 1g
+  web:
+    image: ${APP_IMAGE:?Pin the application release image}
+    container_name: creator_sn-web-1
+    environment:
+      PYTHONPATH: /app
+    volumes:
+      - ./app_config.json:/app/api/app_config.json:ro
+      - ${DATA_DIR:?Set the existing upload data directory}/backup:/app/backup
+      - ${DATA_DIR}/member_cv:/app/member_cv
+      - ${DATA_DIR}/products:/app/products
+      - ${DATA_DIR}/projects:/app/projects
+      - ${DATA_DIR}/resume_images:/app/resume_images
+      - ${DATA_DIR}/user:/app/user
+    ports:
+      - "60081:8000"
+    networks: [database, public]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/openapi.json',timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+    mem_limit: 1g
+    stop_grace_period: 30s
+networks:
+  database:
+    name: creatorsn-postgres-private
+    internal: true
+  public:
+    external: true
+    name: creator_sn_default
+volumes:
+  postgres_data:
+    name: creatorsn-postgres-data
+secrets:
+  postgres_admin_password:
+    file: ./secrets/postgres-admin-password

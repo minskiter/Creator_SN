@@ -14,6 +14,7 @@ from api.controllers.project import router as project_router, seed_default_proje
 from api.controllers.resume import router as resume_router
 from api.controllers.user import router as user_router
 from api.models.db_backup import create_monthly_db_backup
+from api.models.database import tortoise_config
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -39,16 +40,13 @@ async def api_compatibility_prefix(request: Request, call_next):
         request.scope['path'] = request.scope['path'][4:] or '/'
     return await call_next(request)
 
-DB_DIR = BASE_DIR / 'db'
-DB_DIR.mkdir(parents=True, exist_ok=True)
 BACKUP_CHECK_SECONDS = 30 * 24 * 60 * 60
 backup_task = None
 
 register_tortoise(
     app,
-    db_url='sqlite://./db/db.sqlite3',
-    modules={'models': ['api.models.db_models']},
-    generate_schemas=True,
+    config=tortoise_config(),
+    generate_schemas=False,
     add_exception_handlers=True,
 )
 

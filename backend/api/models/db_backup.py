@@ -1,71 +1,64 @@
+"""Atomic PostgreSQL custom-format backups (never copies a live SQLite file)."""
 import datetime
-import shutil
-import sqlite3
+import os
 from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+from urllib.parse import unquote, urlsplit
 
+from api.models.database import BACKEND_DIR, build_db_url
 
-DB_DIR = Path('./db')
-DB_PATH = DB_DIR / 'db.sqlite3'
-BACKUP_DIR = Path('./backup')
+BACKUP_DIR = BACKEND_DIR / 'backup'
 BACKUP_INTERVAL_DAYS = 30
 
 
-def _backup_date_from_name(name: str):
-    if not name.startswith('db_'):
-        return None
-    try:
-        return datetime.datetime.strptime(name, 'db_%Y_%m_%d').date()
-    except ValueError:
-        return None
+def pg_dump_binary():
+    explicit = os.environ.get('PG_DUMP_BIN')
+    if explicit:
+        return explicit
+    found = shutil.which('pg_dump')
+    if found:
+        return found
+    homebrew = Path('/opt/homebrew/opt/postgresql@18/bin/pg_dump')
+    if homebrew.is_file():
+        return str(homebrew)
+    raise RuntimeError('pg_dump is required for PostgreSQL backups; set PG_DUMP_BIN.')
 
 
-def _latest_backup_date():
-    if not BACKUP_DIR.exists():
-        return None
-    backup_dates = [
-        backup_date
-        for child in BACKUP_DIR.iterdir()
-        if child.is_dir()
-        for backup_date in [_backup_date_from_name(child.name)]
-        if backup_date is not None
-    ]
-    return max(backup_dates) if backup_dates else None
-
-
-def _copy_sqlite_db(source_path: Path, target_path: Path):
-    if not source_path.exists():
-        return
-    with sqlite3.connect(source_path) as source_db:
-        with sqlite3.connect(target_path) as target_db:
-            source_db.backup(target_db)
-
-
-def create_monthly_db_backup():
+def create_monthly_db_backup(*, force=False):
     today = datetime.date.today()
-    latest_backup = _latest_backup_date()
-    if latest_backup is not None and (today - latest_backup).days < BACKUP_INTERVAL_DAYS:
-        return None
-
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    target_dir = BACKUP_DIR / f'db_{today:%Y_%m_%d}'
-    if target_dir.exists():
-        return target_dir
-
-    tmp_dir = BACKUP_DIR / f'.{target_dir.name}.tmp'
-    if tmp_dir.exists():
-        shutil.rmtree(tmp_dir)
-    tmp_dir.mkdir(parents=True)
-
-    for item in DB_DIR.iterdir():
-        if item.name == DB_PATH.name or item.name.startswith(f'{DB_PATH.name}-'):
-            continue
-        target = tmp_dir / item.name
-        if item.is_dir():
-            shutil.copytree(item, target)
-        else:
-            shutil.copy2(item, target)
-
-    _copy_sqlite_db(DB_PATH, tmp_dir / DB_PATH.name)
-    tmp_dir.rename(target_dir)
-    print(f'Database backup created: {target_dir}')
-    return target_dir
+    dates = []
+    for child in BACKUP_DIR.glob('db_*'):
+        if child.is_dir() and (child / 'database.dump').is_file():
+            try:
+                dates.append(datetime.datetime.strptime(child.name[:13], 'db_%Y_%m_%d').date())
+            except ValueError:
+                pass
+    if not force and dates and (today-max(dates)).days < BACKUP_INTERVAL_DAYS:
+        return None
+    target = BACKUP_DIR / f'db_{today:%Y_%m_%d}'
+    # Do not overwrite an existing SQLite backup or completed PostgreSQL backup.
+    if target.exists():
+        target = BACKUP_DIR / f'db_{today:%Y_%m_%d}_{datetime.datetime.now():%H%M%S_%f}'
+    parsed = urlsplit(build_db_url())
+    env = os.environ.copy()
+    env.update(PGHOST=parsed.hostname, PGPORT=str(parsed.port or 5432),
+               PGUSER=unquote(parsed.username or ''), PGPASSWORD=unquote(parsed.password or ''),
+               PGDATABASE=unquote(parsed.path.lstrip('/')), PGCONNECT_TIMEOUT='10')
+    temporary = Path(tempfile.mkdtemp(prefix='.postgres-backup-',dir=BACKUP_DIR))
+    try:
+        process = subprocess.run([pg_dump_binary(), '--format=custom', '--no-owner', '--no-acl',
+                                  '--file', str(temporary / 'database.dump')], env=env,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        if process.returncode:
+            # Do not echo client diagnostics that might contain connection credentials.
+            raise RuntimeError('pg_dump failed; verify connectivity and use a client version >= server version.')
+        (temporary / 'database.dump').chmod(0o600)
+        temporary.rename(target)
+    except BaseException:
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
+    print(f'PostgreSQL backup created: {target}')
+    return target

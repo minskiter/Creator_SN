@@ -3,5 +3,8 @@
   "root_pwd": "change-me",
   "invite_code": "change-me",
   "jwt_key": "change-me-in-production",
-  "allow_origins": ["*"]
+  "allow_origins": [
+    "*"
+  ],
+  "database_url": "postgres://creatorsn:change-me@127.0.0.1:55432/creatorsn_dev"
 }

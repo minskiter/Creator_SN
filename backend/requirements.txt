@@ -1,6 +1,8 @@
 fastapi>=0.128.0
 uvicorn[standard]
-tortoise-orm
+tortoise-orm==1.1.9
 pyjwt
 python-multipart
 Pillow
+
+asyncpg>=0.30,<1
