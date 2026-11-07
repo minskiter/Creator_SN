@@ -40,10 +40,12 @@
       <p class="integration-hint">授权码流程 · PKCE S256 必填 · RS256 · Scope：openid profile email · Access Token 有效期 15 分钟</p>
     </section>
     <ApplicationEditorPanel ref="editor" :model-value="editorVisible" :form="form" :editing="!!editing" :saving="busy" :redirects="redirects" :error="editorError" @update:model-value="setEditorVisible" @update:redirects="redirects = $event" @save="save" />
-    <fv-panel :model-value="secretVisible" theme="light" title="请立即保存 Client Secret" width="min(760px, calc(100vw - 32px))" height="min(360px, calc(100dvh - 32px))" background="rgba(255,255,255,.96)" :is-central-side="true" :is-acrylic="true" :is-footer="true" :show-title-bar="false">
+    <Teleport to="body">
+    <fv-panel class="application-secret-modal" :model-value="secretVisible" theme="light" title="请立即保存 Client Secret" width="min(760px, calc(100vw - 32px))" height="min(360px, calc(100dvh - 32px))" background="rgba(255,255,255,.96)" :is-central-side="true" :is-acrylic="true" :is-footer="true" :show-title-bar="false">
       <template #container><div class="secret-content"><h2>请立即保存 Client Secret</h2><p>密钥仅显示这一次，关闭后无法再次查看。不要写入前端代码或提交到 Git。</p><code class="secret">{{ newSecret }}</code></div></template>
       <template #footer><fv-button :background="gradient" theme="dark" border-radius="8" @click="closeSecret">我已安全保存</fv-button></template>
     </fv-panel>
+    </Teleport>
   </div>
 </template>
 <script setup>
@@ -64,7 +66,7 @@ function setEditorVisible(visible) { if (!busy.value) editorVisible.value = visi
 function showSecret(secret) { if (secret) { newSecret.value = secret; secretVisible.value = true; } }
 function closeSecret() { newSecret.value = ""; secretVisible.value = false; }
 async function save() {
-  if (busy.value || !editor.value.reportValidity()) return;
+  if (busy.value || !editor.value?.reportValidity()) return;
   busy.value = true; editorError.value = "";
   try {
     const body = { name: form.name, description: form.description, client_type: form.client_type, enabled: form.enabled, redirect_uris: redirects.value.split("\n").map(v => v.trim()).filter(Boolean) };
@@ -137,7 +139,9 @@ onMounted(load);
 .integration-heading h2 { font-size: 16px; color: #45375d; }
 .integration p, .secret-content p { margin: 12px 0 8px; color: #766d87; font-size: 13px; line-height: 1.7; }
 .integration .integration-hint { margin-bottom: 0; }
-.secret-content { padding: 24px; min-width: 0; color: #241b38; }
+.application-secret-modal :deep(.fv-panel-footer) { flex-shrink: 0; }
+.application-secret-modal :deep(.fv-panel-main-container) { min-height: 0; }
+.secret-content { width: 100%; overflow-y: auto; padding: 24px; min-width: 0; color: #241b38; }
 .secret-content h2 { font-size: 22px; }
 .secret { margin-top: 20px; user-select: all; }
 @media (max-width: 1100px) {

@@ -1,5 +1,6 @@
 <template>
-  <fv-panel :model-value="modelValue" theme="light" :title="editing ? '修改应用' : '添加应用'" width="min(760px, calc(100vw - 32px))" height="min(760px, calc(100dvh - 32px))" background="rgba(255,255,255,.96)" :is-central-side="true" :is-acrylic="true" :is-footer="true" @update:model-value="close">
+  <Teleport to="body">
+  <fv-panel class="application-editor-modal" :model-value="modelValue" theme="light" :title="editing ? '修改应用' : '添加应用'" width="min(760px, calc(100vw - 32px))" height="min(760px, calc(100dvh - 32px))" background="rgba(255,255,255,.96)" :is-central-side="true" :is-acrylic="true" :is-footer="true" @update:model-value="setVisible">
     <template #header><h2 class="panel-heading">{{ editing ? '修改应用' : '添加应用' }}</h2><fv-button theme="light" border-radius="8" :disabled="saving" aria-label="关闭应用编辑" @click="close">关闭</fv-button></template>
     <template #container>
       <form ref="editorForm" class="application-form" @submit.prevent="$emit('save')" @keydown.esc.stop.prevent="close">
@@ -16,6 +17,7 @@
       <div class="panel-actions"><fv-button :disabled="saving" theme="dark" :background="gradient" border-radius="8" @click="submit">{{ saving ? '保存中…' : '保存应用' }}</fv-button><fv-button :disabled="saving" theme="light" border-radius="8" @click="close">取消</fv-button></div>
     </template>
   </fv-panel>
+  </Teleport>
 </template>
 <script setup>
 import { computed, ref } from 'vue';
@@ -24,13 +26,17 @@ const props = defineProps({ modelValue: Boolean, form: { type: Object, required:
 const emit = defineEmits(['update:modelValue', 'update:redirects', 'save']);
 const gradient = computed(() => useTheme().gradient);
 const editorForm = ref();
-function reportValidity() { return editorForm.value.reportValidity(); }
-function submit() { if (!props.saving) editorForm.value.requestSubmit(); }
+function reportValidity() { return editorForm.value?.reportValidity() ?? false; }
+function submit() { if (!props.saving) editorForm.value?.requestSubmit(); }
+// FV emits true when opening as well as false when closing.
+function setVisible(value) { if (!props.saving) emit('update:modelValue', value); }
 function close() { if (!props.saving) emit('update:modelValue', false); }
 defineExpose({ reportValidity });
 </script>
 <style scoped lang="scss">
-.application-form { display: grid; gap: 15px; padding: 20px; min-width: 0; }
+.application-editor-modal :deep(.fv-panel-control-block), .application-editor-modal :deep(.fv-panel-footer) { flex-shrink: 0; }
+.application-editor-modal :deep(.fv-panel-main-container) { min-height: 0; }
+.application-form { width: 100%; overflow-y: auto; overscroll-behavior: contain; display: grid; gap: 15px; padding: 20px; min-width: 0; }
 .panel-heading { color: #241b38; font-size: 20px; font-weight: 600; }
 .hint { color: #766d87; font-size: 13px; line-height: 1.7; }
 .form-field { display: grid; gap: 7px; min-width: 0; color: #5d5570; font-size: 13px; font-weight: 700; }

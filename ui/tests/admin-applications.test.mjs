@@ -117,3 +117,20 @@ test('editor keeps native form validation and blocks submit/close while saving',
   props.saving = true; s.submit(); s.close(); assert.equal(submitted, 1); assert.equal(events.length, 0);
   props.saving = false; s.close(); assert.deepEqual(events, [['update:modelValue', false]]);
 });
+test('FV opening notification stays open instead of being interpreted as close', () => {
+  const props = reactive({ form: {}, saving: false }); const events = [];
+  const { state: s } = setup(panelPath, {}, props, (...args) => events.push(args));
+  assert.match(read(panelPath), /@update:model-value="setVisible"/);
+  assert.doesNotMatch(read(panelPath), /@update:model-value="close"/);
+  s.setVisible(true); assert.deepEqual(events, [['update:modelValue', true]]);
+  s.setVisible(false); assert.deepEqual(events.at(-1), ['update:modelValue', false]);
+  props.saving = true; s.setVisible(false); assert.equal(events.length, 2);
+});
+test('missing editor refs fail validation safely and panels escape clipped page containers', async () => {
+  const { state: s, calls } = view(); await s.save(); assert.equal(calls.length, 0);
+  const { state: editor } = setup(panelPath, {}, { form: {}, saving: false });
+  assert.equal(editor.reportValidity(), false); editor.submit();
+  for (const path of [viewPath, panelPath]) assert.match(read(path), /<Teleport to="body">/);
+  assert.match(read(panelPath), /overflow-y: auto/);
+  assert.match(read(panelPath), /flex-shrink: 0/);
+});
