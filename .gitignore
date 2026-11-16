@@ -10,3 +10,15 @@ backend/backup/
 backend/member_cv/*
 backend/products/*
 backend/user/*
+
+# Local development
+.venv/
+.local/
+ui/node_modules/
+ui/dist/
+__pycache__/
+backend/api/app_config.json.tmp
+
+# Production runtime secrets (release directories should live outside the repo)
+deploy/app_config.json
+deploy/secrets/

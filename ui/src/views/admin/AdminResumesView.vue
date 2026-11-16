@@ -11,10 +11,32 @@
 				:background="gradient"
 				border-radius="8"
 				style="width: 120px"
+				:disabled="saving"
 				@click="openCreate"
 				>{{ local("Add resume") }}</fv-button
 			>
 		</div>
+		<div class="resume-toolbar">
+			<span>{{ local("Resume count: {total}", { total: resumes.length }) }}</span>
+			<button type="button" class="touch-button" :disabled="loading || saving" @click="load">{{ loading ? local("Loading…") : local("Refresh list") }}</button>
+		</div>
+		<p v-if="loadError" class="load-error" role="alert">{{ loadError }}</p>
+		<section class="mobile-resumes" :aria-label="local('Resume Management')" :aria-busy="loading">
+			<p v-if="loading && !resumes.length" class="mobile-empty" role="status">{{ local("Loading…") }}</p>
+			<p v-else-if="!resumes.length && !loadError" class="mobile-empty">{{ local("No resumes found") }}</p>
+			<article v-for="item in resumes" :key="item.id" class="mobile-resume-card">
+				<h2>{{ item.user?.name || item.userid || local("Unbound resume") }}</h2>
+				<dl>
+					<div><dt>{{ local("Bound user") }}</dt><dd>{{ item.userid || local("Unbound") }}</dd></div>
+					<div><dt>{{ local("Email") }}</dt><dd>{{ item.user?.email || "—" }}</dd></div>
+					<div><dt>{{ local("Updated") }}</dt><dd>{{ formatDate(item.updated_at) }}</dd></div>
+				</dl>
+				<div class="mobile-resume-actions">
+					<button type="button" class="touch-button edit-button" :style="{ background: gradient }" :disabled="saving" @click="openEdit(item)">{{ local("Edit") }}</button>
+					<button type="button" class="touch-button delete-button" :disabled="saving || loading" @click="remove(item)">{{ local("Delete") }}</button>
+				</div>
+			</article>
+		</section>
 		<div class="list-card">
 			<fv-details-list
 				v-model="resumes"
@@ -95,6 +117,8 @@ export default {
 			visible: false,
 			editing: false,
 			saving: false,
+			loading: false,
+			loadError: "",
 			form: {
 				id: null,
 				userid: "",
@@ -129,15 +153,26 @@ export default {
 			return useAppStore().local(text, params);
 		},
 		async load() {
-			const result = await ResumeApi.list();
-			if (result.code === 200) this.resumes = result.data || [];
+			if (this.loading) return;
+			this.loading = true;
+			this.loadError = "";
+			try {
+				const result = await ResumeApi.list();
+				if (result.code !== 200) throw new Error(result.message || this.local("Failed to load resumes"));
+				this.resumes = result.data || [];
+			} catch (error) {
+				this.loadError = error.message || this.local("Failed to load resumes");
+			} finally { this.loading = false; }
 		},
 		async loadUsers() {
-			const result = await UserApi.list(undefined, 0, 9999);
-			if (result.code === 200) {
+			try {
+				const result = await UserApi.list(undefined, 0, 9999);
+				if (result.code !== 200) throw new Error(result.message || this.local("Failed to load users"));
 				this.users = result.data || [];
 				this.rebuildUserOptions();
 				this.userOption = this.findUserOption(this.form.userid);
+			} catch (error) {
+				this.$barWarning(error.message || this.local("Failed to load users"), { status: "error", theme: this.theme });
 			}
 		},
 		rebuildUserOptions() {
@@ -151,6 +186,7 @@ export default {
 			];
 		},
 		openCreate() {
+			if (this.saving) return;
 			this.editing = false;
 			this.form = {
 				id: null,
@@ -161,6 +197,7 @@ export default {
 			this.visible = true;
 		},
 		openEdit(item) {
+			if (this.saving) return;
 			this.editing = true;
 			this.form = {
 				id: item.id,
@@ -173,7 +210,7 @@ export default {
 		findUserOption(userid) {
 			return (
 				this.userOptions.find((option) => option.value === userid) ||
-				this.userOptions[0]
+				{ key: userid || "", value: userid || "", text: userid || this.local("Unbound resume") }
 			);
 		},
 		selectUser(option) {
@@ -202,6 +239,7 @@ export default {
 			this.form.introduction = content;
 		},
 		async save() {
+			if (this.saving) return;
 			this.saving = true;
 			try {
 				const result = await ResumeApi.save(this.form);
@@ -217,19 +255,29 @@ export default {
 						result.message || this.local("Save failed"),
 						{ status: "error", theme: this.theme },
 					);
+			} catch (error) {
+				this.$barWarning(error.message || this.local("Save failed"), { status: "error", theme: this.theme });
 			} finally {
 				this.saving = false;
 			}
 		},
 		async remove(item) {
+			if (this.saving || this.loading) return;
 			this.$infoBox(this.local("Delete this resume?"), {
 				theme: this.theme,
 				status: "error",
 				confirmTitle: this.local("Confirm"),
 				cancelTitle: this.local("Cancel"),
 				confirm: async () => {
-					const result = await ResumeApi.remove(item.id);
-					if (result.code === 200) await this.load();
+					if (this.saving || this.loading) return;
+					this.saving = true;
+					try {
+						const result = await ResumeApi.remove(item.id);
+						if (result.code !== 200) throw new Error(result.message || this.local("Delete failed"));
+						await this.load();
+					} catch (error) {
+						this.$barWarning(error.message || this.local("Delete failed"), { status: "error", theme: this.theme });
+					} finally { this.saving = false; }
 				},
 			});
 		},
@@ -261,6 +309,14 @@ export default {
 	justify-content: space-between;
 	gap: 20px;
 }
+.page-header > div { min-width: 0; overflow-wrap: anywhere; }
+.page-header > .fv-Button { flex-shrink: 0; min-height: 44px; }
+.resume-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin: 24px 0 14px; color: #8f839a; font-size: 13px; }
+.load-error { color: #b13c60; overflow-wrap: anywhere; line-height: 1.7; margin: 12px 0; }
+.mobile-resumes { display: none; }
+.touch-button { min-height: 44px; border: 1px solid #e1d8ee; border-radius: 8px; padding: 10px 16px; background: #fff; color: #5d3679; font: inherit; font-size: 14px; cursor: pointer; touch-action: manipulation; }
+.touch-button:disabled { opacity: .5; cursor: not-allowed; }
+.touch-button:focus-visible { outline: 2px solid #a56bd1; outline-offset: 3px; }
 .eyebrow {
 	font-size: 11px;
 	letter-spacing: 0.2em;
@@ -276,9 +332,9 @@ export default {
 	color: #766d87;
 }
 .list-card {
-	height: calc(100% - 180px);
+	height: calc(100% - 260px);
 	min-height: 340px;
-	margin-top: 32px;
+	margin-top: 14px;
 	overflow: hidden;
 	border: 1px solid rgba(255, 255, 255, 0.95);
 	border-radius: 18px;
@@ -291,5 +347,28 @@ export default {
 }
 .muted {
 	color: #8f839a;
+}
+@media (max-width: 1024px) {
+	.list-card { display: none; }
+	.mobile-resumes { display: grid; gap: 14px; }
+	.mobile-empty { padding: 36px 16px; color: #8f839a; text-align: center; }
+	.mobile-resume-card { min-width: 0; padding: 18px; border: 1px solid #fff; border-radius: 16px; background: rgba(255,255,255,.78); box-shadow: 0 12px 30px rgba(116,77,164,.08); }
+	.mobile-resume-card h2 { margin: 0 0 16px; font-size: 19px; overflow-wrap: anywhere; }
+	.mobile-resume-card dl { display: grid; gap: 12px; }
+	.mobile-resume-card dl > div { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 12px; }
+	.mobile-resume-card dt { color: #8f839a; font-size: 13px; }
+	.mobile-resume-card dd { margin: 0; min-width: 0; color: #45375d; font-size: 14px; overflow-wrap: anywhere; }
+	.mobile-resume-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; margin-top: 18px; }
+	.edit-button { color: #fff; border-color: transparent; }
+	.delete-button { color: #b13c60; border-color: #eed4df; }
+}
+@media (max-width: 600px) {
+	.resumes-page { padding: 28px 16px 24px; }
+	.page-header { align-items: flex-start; flex-direction: column; gap: 16px; }
+	.page-header h1 { font-size: 32px; }
+	.page-header p { line-height: 1.7; }
+}
+@media (max-width: 360px) {
+	.mobile-resume-card dl > div { grid-template-columns: minmax(0, 1fr); gap: 5px; }
 }
 </style>

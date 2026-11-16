@@ -43,6 +43,12 @@ export default {
 					route: "/admin/resumes",
 				},
 				{
+					key: 3,
+					name: () => "OIDC 应用管理",
+					icon: "AppIconDefault",
+					route: "/admin/applications",
+				},
+				{
 					key: 2,
 					name: () => this.local("Project Management"),
 					icon: "ProductList",

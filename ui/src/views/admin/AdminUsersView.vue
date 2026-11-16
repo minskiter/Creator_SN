@@ -14,6 +14,7 @@
 		<div class="toolbar">
 			<fv-text-box
 				v-model="currentSearch"
+				class="user-search"
 				:placeholder="local('Search account or email')"
 				icon="Filter"
 				border-radius="6"
@@ -31,6 +32,29 @@
 				>{{ loading ? local("Loading…") : local("Refresh list") }}</fv-button
 			>
 		</div>
+		<p v-if="loadError" class="load-error" role="alert">{{ loadError }}</p>
+		<section class="mobile-users" :aria-label="local('User Management')" :aria-busy="loading">
+			<p v-if="loading && !users.length" class="mobile-empty" role="status">{{ local("Loading…") }}</p>
+			<p v-else-if="!users.length && !loadError" class="mobile-empty">{{ local("No users found") }}</p>
+			<article v-for="item in users" :key="item.userid" class="mobile-user-card">
+				<button type="button" class="user-link mobile-user-heading" :aria-label="local('Manage permissions') + ' · ' + item.userid" @click="showUserRole(item)">
+					<span class="avatar-letter">{{ firstLetter(item) }}</span>
+					<span class="mobile-user-identity"><strong>{{ item.userid }}</strong><small>{{ formatDate(item.last_login) }}</small></span>
+				</button>
+				<dl class="mobile-user-details">
+					<div><dt>{{ local("Name") }}</dt><dd>{{ item.name || "—" }}</dd></div>
+					<div><dt>{{ local("Email") }}</dt><dd>{{ item.email || "—" }}</dd></div>
+					<div><dt>{{ local("Phone") }}</dt><dd>{{ item.phone || "—" }}</dd></div>
+					<div><dt>{{ local("Gender") }}</dt><dd>{{ item.gender || "—" }}</dd></div>
+					<div><dt>{{ local("Invite code") }}</dt><dd>{{ item.invite_code || "—" }}</dd></div>
+					<div class="mobile-user-roles"><dt>{{ local("User roles") }}</dt><dd><span v-for="role in roleNames(item.role)" :key="role" class="role-chip" :class="{ 'role-admin': role === 'admin' }">{{ roleLabel(role) }} <code>{{ role }}</code></span><span v-if="!roleNames(item.role).length">{{ local("No roles assigned") }}</span></dd></div>
+				</dl>
+				<div class="mobile-user-actions">
+					<button type="button" class="touch-button permission-button" :style="{ background: gradient }" :disabled="loading" @click="showUserRole(item)">{{ local("Manage permissions") }}</button>
+					<button type="button" class="touch-button" :disabled="loading" @click="resetPassword(item)">{{ local("Reset password") }}</button>
+				</div>
+			</article>
+		</section>
 		<div class="list-card">
 			<fv-details-list
 				v-model="users"
@@ -126,6 +150,7 @@
 			<span
 				>{{ local("Page {page} · {size} per page, {total} users", { page, size: pageSize, total }) }}</span
 			><fv-pagination
+				class="desktop-pagination"
 				:model-value="page"
 				:theme="theme"
 				:total="totalPages"
@@ -135,12 +160,20 @@
 				border-radius="7"
 				@update:model-value="handlePageChange"
 			></fv-pagination>
+			<nav class="mobile-pagination" :aria-label="local('User pagination')">
+				<button type="button" class="touch-button" :disabled="loading || page <= 1" @click="handlePageChange(page - 1)">{{ local("Previous page") }}</button>
+				<span aria-live="polite">{{ page }} / {{ totalPages }}</span>
+				<button type="button" class="touch-button" :disabled="loading || page >= totalPages" @click="handlePageChange(page + 1)">{{ local("Next page") }}</button>
+			</nav>
 		</div>
 		<user-role-panel
 			v-model="showRolePanel"
 			:user="currentItem"
 			:roles="roles"
+			:loading="rolesLoading"
+			:error="rolesError"
 			@updated="getUsers"
+			@retry="getRoles"
 		></user-role-panel>
 	</div>
 </template>
@@ -164,6 +197,10 @@ export default {
 			pageSize: 10,
 			total: 0,
 			loading: false,
+			loadError: "",
+			rolesLoading: false,
+			rolesError: "",
+			usersRequest: 0,
 			head: [
 				{ content: "No.", width: 70 },
 				{ content: "Account", sortName: "userid", width: 220 },
@@ -172,7 +209,7 @@ export default {
 				{ content: "Email", sortName: "email", width: 240 },
 				{ content: "Invite code", sortName: "invite_code", width: 150 },
 				{ content: "Phone", sortName: "phone", width: 170 },
-				{ content: "Role / Actions", sortName: "role", width: 230 },
+				{ content: "Role / Actions", sortName: "role", width: 340 },
 			],
 		};
 	},
@@ -194,7 +231,9 @@ export default {
 			return useAppStore().local(text, params);
 		},
 		async getUsers() {
+			const request = ++this.usersRequest;
 			this.loading = true;
+			this.loadError = "";
 			try {
 				const [list, count] = await Promise.all([
 					UserApi.list(
@@ -204,15 +243,32 @@ export default {
 					),
 					UserApi.count(this.currentSearch || undefined),
 				]);
-				this.users = list.code === 200 ? list.data || [] : [];
-				this.total = count.code === 200 ? Number(count.data || 0) : 0;
+				if (request !== this.usersRequest) return;
+				if (list.code !== 200 || count.code !== 200)
+					throw new Error(list.message || count.message || this.local("Failed to load users"));
+				this.users = list.data || [];
+				this.total = Number(count.data || 0);
+				if (this.showRolePanel) this.currentItem = this.users.find(item => item.userid === this.currentItem.userid) || this.currentItem;
+			} catch (error) {
+				if (request === this.usersRequest) this.loadError = error.message || this.local("Failed to load users");
 			} finally {
-				this.loading = false;
+				if (request === this.usersRequest) this.loading = false;
 			}
 		},
 		async getRoles() {
-			const result = await UserApi.roles();
-			if (result.code === 200) this.roles = result.data || [];
+			if (this.rolesLoading) return;
+			this.rolesLoading = true;
+			this.rolesError = "";
+			try {
+				const result = await UserApi.roles();
+				if (result.code !== 200) throw new Error(result.message || this.local("Failed to load roles"));
+				this.roles = result.data || [];
+			} catch (error) {
+				this.roles = [];
+				this.rolesError = error.message || this.local("Failed to load roles");
+			} finally {
+				this.rolesLoading = false;
+			}
 		},
 		handleSearchKeyup(event) {
 			if (event.key === "Enter") {
@@ -221,10 +277,12 @@ export default {
 			}
 		},
 		handlePageChange(page) {
+			if (this.loading || page < 1 || page > this.totalPages) return;
 			this.page = page;
 			this.getUsers();
 		},
 		showUserRole(item) {
+			if (!item?.userid) return;
 			this.currentItem = item;
 			this.showRolePanel = true;
 		},
@@ -237,7 +295,11 @@ export default {
 		roleNames(role) {
 			return String(role || "")
 				.split(",")
+				.map(value => value.trim())
 				.filter(Boolean);
+		},
+		roleLabel(role) {
+			return role === "admin" ? this.local("Administrator") : role === "user" ? this.local("Regular user") : role;
 		},
 		firstLetter(item) {
 			return (item.name || item.userid || "?").slice(0, 1).toUpperCase();
@@ -326,8 +388,9 @@ export default {
 	align-items: center;
 	margin: 32px 0 14px;
 }
-.toolbar fv-text-box {
+.user-search {
 	width: min(430px, 100%);
+	min-width: 0;
 }
 .list-card {
 	height: calc(100% - 260px);
@@ -348,6 +411,8 @@ export default {
 	text-align: left;
 	cursor: pointer;
 	font: inherit;
+	min-height: 44px;
+	min-width: 0;
 }
 .avatar-letter {
 	display: grid;
@@ -359,6 +424,7 @@ export default {
 	color: #fff;
 	font-size: 12px;
 	font-weight: 800;
+	flex-shrink: 0;
 }
 .user-link strong,
 .user-link small {
@@ -379,7 +445,7 @@ export default {
 	gap: 7px;
 	overflow-x: auto;
 }
-.role-actions fv-button {
+.role-actions :deep(.fv-Button) {
 	font-size: 11px;
 }
 .bottom-bar {
@@ -392,29 +458,55 @@ export default {
 	display: flex;
 	gap: 8px;
 }
-@media (max-width: 800px) {
+.mobile-users, .mobile-pagination { display: none; }
+.load-error { color: #b13c60; margin: 14px 0; overflow-wrap: anywhere; }
+.touch-button { min-height: 44px; min-width: 0; border: 1px solid #e1d8ee; border-radius: 8px; padding: 10px 14px; background: rgba(255,255,255,.85); color: #5d3679; font: inherit; font-size: 14px; cursor: pointer; touch-action: manipulation; }
+.touch-button:disabled { opacity: .5; cursor: not-allowed; }
+.touch-button:focus-visible, .user-link:focus-visible { outline: 2px solid #a56bd1; outline-offset: 3px; }
+.permission-button { color: #fff; border-color: transparent; }
+@media (max-width: 1024px) {
 	.users-page {
 		padding: 28px 18px;
 	}
 	.page-header {
 		align-items: start;
+		flex-wrap: wrap;
 	}
 	.toolbar {
 		align-items: stretch;
 		flex-direction: column;
 	}
-	.toolbar fv-text-box {
+	.user-search {
 		width: 100%;
 	}
-	.list-card {
-		overflow: auto;
-	}
-	.list-card fv-details-list {
-		min-width: 1100px;
-	}
+	.list-card, .desktop-pagination { display: none; }
+	.mobile-users { display: grid; gap: 14px; min-width: 0; }
+	.mobile-user-card { min-width: 0; padding: 18px; border: 1px solid rgba(255,255,255,.95); border-radius: 18px; background: rgba(255,255,255,.75); box-shadow: 0 12px 32px rgba(116,77,164,.08); }
+	.mobile-user-heading { width: 100%; gap: 12px; margin-bottom: 16px; }
+	.mobile-user-identity { min-width: 0; overflow-wrap: anywhere; }
+	.mobile-user-heading .avatar-letter { width: 42px; height: 42px; font-size: 16px; }
+	.mobile-user-details { display: grid; gap: 12px; margin: 0; }
+	.mobile-user-details > div { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; align-items: baseline; }
+	.mobile-user-details dt { color: #8f839a; font-size: 12px; }
+	.mobile-user-details dd { min-width: 0; margin: 0; color: #45375d; font-size: 14px; overflow-wrap: anywhere; }
+	.mobile-user-roles dd { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+	.role-chip { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; max-width: 100%; padding: 5px 9px; border-radius: 8px; color: #39755a; background: #e8f4ee; }
+	.role-chip code { font-size: 11px; overflow-wrap: anywhere; }
+	.role-chip.role-admin { color: #95621e; background: #fff0d9; }
+	.mobile-user-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; margin-top: 18px; }
+	.mobile-empty { padding: 40px 18px; color: #8c7e99; text-align: center; border: 1px dashed #d8c5e7; border-radius: 18px; }
 	.bottom-bar {
+		align-items: stretch;
+		flex-direction: column;
+		gap: 12px;
 		padding-bottom: 25px;
 	}
+	.mobile-pagination { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; }
+}
+@media (max-width: 360px) {
+	.users-page { padding: 24px 12px; }
+	.mobile-user-card { padding: 14px; }
+	.mobile-user-actions { grid-template-columns: minmax(0, 1fr); }
 }
 .right-menu {
 	min-width: 150px;

@@ -806,5 +806,31 @@ export default {
     "Project": {
         "en": "Project",
         "cn": "项目"
-    }
+    },
+    "No users found": {"en": "No users found", "cn": "未找到用户"},
+    "No roles assigned": {"en": "No roles assigned", "cn": "未分配角色"},
+    "User pagination": {"en": "User pagination", "cn": "用户列表分页"},
+    "Previous page": {"en": "Previous page", "cn": "上一页"},
+    "Next page": {"en": "Next page", "cn": "下一页"},
+    "Failed to load users": {"en": "Failed to load users", "cn": "加载用户失败"},
+    "Failed to load roles": {"en": "Failed to load roles", "cn": "加载角色失败"},
+    "Role changes are saved immediately": {"en": "Role changes are saved immediately", "cn": "修改后自动保存，请等待保存完成再关闭"},
+    "No roles available": {"en": "No roles available", "cn": "暂无可用角色"},
+    "Retry": {"en": "Retry", "cn": "重试"},
+    "Close": {"en": "Close", "cn": "关闭"},
+    "Role changes are saved only after confirmation": {"en": "Role changes are saved only after confirmation", "cn": "所有角色变更均需二次确认后才会保存，取消不会修改权限"},
+    "Grant role": {"en": "Grant role", "cn": "授予角色"},
+    "Remove role": {"en": "Remove role", "cn": "移除角色"},
+    "Confirm {action} for {userid}: {role}?": {"en": "Confirm {action} for {userid}: {role}?", "cn": "确定对账户 {userid} 执行「{action}：{role}」吗？"},
+    "This account will be able to manage users and administrator permissions.": {"en": "This account will be able to manage users and administrator permissions.", "cn": "此账户将获得管理用户和管理员权限的能力，请确认授权对象。"},
+    "This account will lose administrator access. If this is your account, you may be unable to manage the site.": {"en": "This account will lose administrator access. If this is your account, you may be unable to manage the site.", "cn": "此账户将失去管理员权限。如果这是你自己的账户，你可能无法继续管理网站，请谨慎操作。"},
+    "Confirm administrator permission change": {"en": "Confirm administrator permission change", "cn": "二次确认管理员权限变更"},
+    "Confirm permission change": {"en": "Confirm permission change", "cn": "二次确认角色变更"},
+    "Confirm grant": {"en": "Confirm grant", "cn": "确认授予"},
+    "Confirm removal": {"en": "Confirm removal", "cn": "确认移除"},
+    "Awaiting confirmation…": {"en": "Awaiting confirmation…", "cn": "请在确认框中确认或取消…"},
+    "Resume count: {total}": {"en": "Resume count: {total}", "cn": "共 {total} 份简历"},
+    "No resumes found": {"en": "No resumes found", "cn": "暂无简历"},
+    "Failed to load resumes": {"en": "Failed to load resumes", "cn": "加载简历失败"},
+    "Delete failed": {"en": "Delete failed", "cn": "删除失败"}
 }

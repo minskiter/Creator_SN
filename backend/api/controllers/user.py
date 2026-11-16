@@ -62,12 +62,14 @@ async def apply(user: User):
     if await UserDBModel.filter(userid=user.userid).exists():
         return response_body(code=4003, status='failed', message='User already exists')
 
-    user_data = user.dict()
+    user_data = user.model_dump()
+    # Public registration must never accept privileges supplied by the caller.
+    user_data['role'] = 'user'
     user_data['pwd'] = _encode_pwd(user_data['pwd'])
     user_data['apply_time'] = datetime.datetime.now().isoformat()
     await UserDBModel.create(**user_data)
 
-    return response_body(code=200, status='success', message='User registered successfully', data=user_data)
+    return response_body(code=200, status='success', message='User registered successfully', data=_sanitize_user(user_data))
 
 
 @router.post('/login', summary='Login', operation_id='Login')
@@ -114,8 +116,8 @@ async def get_my_info(valid_info=None):
 @auth.require_user()
 async def update_myself(user: UserInfo, valid_info=None):
     userid = valid_info['userid']
-    user_data = user.dict()
-    remove_key = ['userid', 'pwd', 'invite_code', 'apply_time', 'last_login']
+    user_data = user.model_dump()
+    remove_key = ['userid', 'pwd', 'role', 'invite_code', 'apply_time', 'last_login']
     for key in remove_key:
         user_data.pop(key, None)
     final_data = {k: v for k, v in user_data.items() if v is not None}

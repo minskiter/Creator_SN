@@ -10,6 +10,7 @@ def create_jwt(obj: dict, key, algorithm='HS256'):
     }  # jwt的头部，包含了类型和算法的指定
 
     payload = obj
+    payload['iat'] = int(datetime.datetime.now().timestamp())
     exp = datetime.datetime.now() + datetime.timedelta(days=14)
     payload['exp'] = exp
 
